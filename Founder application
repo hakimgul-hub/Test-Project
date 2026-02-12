@@ -1,0 +1,661 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  User, Briefcase, ChevronRight, Check, X, Phone, Calendar, Target, 
+  Info, Loader2, History as HistoryIcon, Compass, Activity, UserCircle,
+  Mail, Lock, ArrowRight, Eye, EyeOff, MapPin, Quote, ShieldCheck, Zap, 
+  Clock, Mic, Video, PhoneOff, CheckCircle2, Home, AlertCircle, FileText,
+  CalendarDays, Send
+} from 'lucide-react';
+
+/**
+ * WCAG COMPLIANT DARK THEME TOKENS
+ */
+const THEME = {
+  founder: { 
+    primary: 'bg-indigo-500', 
+    text: 'text-indigo-400', 
+    border: 'border-indigo-500/30',
+    light: 'bg-indigo-500/10'
+  },
+  investor: { 
+    primary: 'bg-emerald-500', 
+    text: 'text-emerald-400', 
+    border: 'border-emerald-500/30',
+    light: 'bg-emerald-500/10'
+  },
+  neutral: {
+    primary: 'bg-slate-50',
+    text: 'text-slate-100',
+    bg: 'bg-[#0A0C10]',
+    card: 'bg-[#161B22]',
+    border: 'border-slate-800'
+  }
+};
+
+const MOCK_DATA = {
+  investors: [
+    { 
+      id: 'i1', name: 'Alex Rivers', firm: 'Blue Chip Ventures', 
+      ticketSize: '$500K - $1.5M', focusAreas: 'Infrastructure, DevTools', 
+      geography: 'San Francisco / Remote', 
+      style: 'Ex-Stripe. I back technical founders building the unsexy plumbing of the internet.'
+    },
+    { 
+      id: 'i2', name: 'Sarah Chen', firm: 'Nexus Labs', 
+      ticketSize: '$250K - $750K', focusAreas: 'HealthTech, Applied AI', 
+      geography: 'London, UK', 
+      style: 'Medical doctor turned builder. Passionate about decentralizing diagnostics.'
+    }
+  ],
+  founders: [
+    { 
+      id: 'f1', company: 'Vector Health', name: 'James Kim', 
+      sector: 'Health AI', 
+      problem: 'Administrative overhead consumes 40% of a clinician’s time.',
+      idea: 'Real-time ambient voice to structured medical records.',
+      proof: 'Piloted in 3 clinics, saving 2 hours per doctor daily.',
+      team: '2x 2nd time founders, ML PhD from Stanford.'
+    }
+  ]
+};
+
+export default function App() {
+  // Navigation & Flow State
+  const [step, setStep] = useState('landing'); // landing, auth, role-selection, setup, pending-verification, feed, match, intent-form, intent-review, pending-intent, scheduling, calls, active-call, post-call-survey
+  const [role, setRole] = useState(null);
+  const [activeTab, setActiveTab] = useState('discovery');
+  
+  // Interaction State
+  const [swipedCount, setSwipedCount] = useState(0);
+  const [swipeDir, setSwipeDir] = useState(null);
+  const [hasMatches, setHasMatches] = useState(false);
+  const [callHistory, setCallHistory] = useState([]);
+  const [activeCallPartner, setActiveCallPartner] = useState(null);
+  const [swipeWarningShown, setSwipeWarningShown] = useState(false);
+  
+  // Time & Form State
+  const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
+  const [toastMsg, setToastMsg] = useState(null);
+
+  const roleTheme = useMemo(() => (role ? THEME[role] : THEME.founder), [role]);
+
+  // Timer logic for Active Call
+  useEffect(() => {
+    let timer;
+    if (step === 'active-call' && timeLeft > 0) {
+      timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (step === 'active-call' && timeLeft === 0) {
+      setStep('post-call-survey');
+    }
+    return () => clearInterval(timer);
+  }, [step, timeLeft]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  const handleSwipe = (dir) => {
+    if (role === 'founder' && !swipeWarningShown) {
+      setSwipeWarningShown(true);
+      return; // Stop swipe to show warning first
+    }
+
+    setSwipeDir(dir);
+    const items = role === 'founder' ? MOCK_DATA.investors : MOCK_DATA.founders;
+    const currentItem = items[swipedCount];
+
+    setTimeout(() => {
+      if (dir === 'right') {
+        showToast("Interest saved privately.");
+        // Simulate immediate match for demo flow
+        setTimeout(() => {
+          setHasMatches(true);
+          setActiveCallPartner(currentItem);
+          setStep('match');
+        }, 1000);
+      } else {
+        setSwipedCount(prev => prev + 1);
+      }
+      setSwipeDir(null);
+    }, 450);
+  };
+
+  const completeJourney = (outcome) => {
+    const newEntry = {
+      id: Date.now(),
+      partner: activeCallPartner.name || activeCallPartner.company,
+      date: new Date().toLocaleDateString(),
+      outcome: outcome === 'yes' ? 'Moved Off-Platform' : 'Closed',
+      role: role
+    };
+    setCallHistory([newEntry, ...callHistory]);
+    setHasMatches(false);
+    setActiveTab('home');
+    setStep('home');
+  };
+
+  // --- UI Components ---
+
+  const Navbar = () => {
+    const tabs = [
+      { id: 'home', label: 'Home', icon: Home, route: 'home' },
+      { id: 'discovery', label: 'Discover', icon: Compass, route: 'feed' },
+      { id: 'calls', label: 'Loops', icon: Activity, route: 'calls' },
+      { id: 'profile', label: 'Account', icon: UserCircle, route: 'profile' },
+    ];
+
+    return (
+      <nav className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[90%] z-50">
+        <div className={`${THEME.neutral.card} backdrop-blur-xl border ${THEME.neutral.border} rounded-full px-2 py-2 flex justify-between shadow-2xl shadow-black/50`}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setStep(tab.route); }}
+                className={`relative flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-full ${isActive ? 'text-white' : 'text-slate-500'}`}
+              >
+                {isActive && <div className={`absolute inset-0 ${roleTheme.light} rounded-full animate-in fade-in zoom-in-95`} />}
+                <Icon size={isActive ? 20 : 22} strokeWidth={isActive ? 2.5 : 2} className="relative z-10" />
+                <span className="text-[9px] font-bold uppercase tracking-widest relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  };
+
+  return (
+    <div className="h-screen w-full flex items-center justify-center bg-slate-950 font-sans">
+      <div className="w-full max-w-[430px] h-full sm:h-[880px] bg-black sm:rounded-[60px] relative overflow-hidden shadow-[0_0_0_10px_#111,0_60px_100px_-20px_rgba(0,0,0,1)] border-[8px] border-[#1f1f1f]">
+        <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-32 h-7 bg-black rounded-b-2xl z-50" />
+        
+        {/* TOAST NOTIFICATION */}
+        {toastMsg && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[300] bg-slate-800 text-white px-5 py-3 rounded-full text-sm font-bold shadow-xl animate-in fade-in slide-in-from-top-5">
+            {toastMsg}
+          </div>
+        )}
+
+        <main className="h-full overflow-y-auto no-scrollbar pb-32">
+          
+          {/* 0. LANDING & AUTH */}
+          {step === 'landing' && (
+             <div className={`h-full ${THEME.neutral.bg} flex flex-col items-center justify-center p-10 animate-in fade-in`}>
+                <div className={`w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-black text-4xl font-black italic shadow-2xl mb-8`}>F</div>
+                <h1 className="text-5xl font-black tracking-tighter text-white italic mb-4">FOUND.</h1>
+                <p className="text-slate-400 text-center text-lg font-medium max-w-[280px] leading-relaxed mb-16">Mutual interest before effort.</p>
+                <button onClick={() => setStep('auth')} className="w-full bg-white text-black py-5 rounded-2xl font-black text-lg active:scale-95 transition-all">Begin Journey</button>
+             </div>
+          )}
+
+          {step === 'auth' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-10 flex flex-col pt-24 animate-in slide-in-from-right-10`}>
+                <h2 className="text-4xl font-black text-white italic tracking-tighter mb-12">Identify Yourself.</h2>
+                <div className="space-y-4">
+                    <input type="email" placeholder="Work Email" className={`${THEME.neutral.card} w-full py-5 px-6 rounded-2xl border border-slate-800 text-white font-bold outline-none`} />
+                    <button onClick={() => setStep('role-selection')} className="w-full bg-white text-black py-5 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">Continue</button>
+                </div>
+            </div>
+          )}
+
+          {step === 'role-selection' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-10 flex flex-col justify-center animate-in slide-in-from-bottom-10`}>
+              <h2 className="text-4xl font-black text-white italic tracking-tighter mb-4">Choose Path.</h2>
+              <div className="space-y-4">
+                {['founder', 'investor'].map(r => (
+                  <button key={r} onClick={() => { setRole(r); setStep(r === 'founder' ? 'founder-setup' : 'investor-setup'); }} className={`${THEME.neutral.card} w-full p-8 rounded-[35px] border border-slate-800 text-left hover:border-indigo-500 transition-all group active:scale-95`}>
+                    <p className="text-2xl font-black text-white italic uppercase tracking-tighter">{r}</p>
+                    <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] mt-1">{r === 'founder' ? 'Seeking strategic alignment' : 'Optimizing for high signal'}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 1. PROFILE SETUP (FOUNDER) */}
+          {step === 'founder-setup' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-8 pt-20 animate-in slide-in-from-right-10`}>
+                <h2 className="text-3xl font-black text-white italic tracking-tighter mb-2">The Snapshot.</h2>
+                <p className="text-slate-500 text-sm mb-8">Structured fields only. No decks. No selling.</p>
+                
+                <div className="space-y-5">
+                    {[
+                      { label: 'Sector', placeholder: 'e.g. Health AI' },
+                      { label: 'Problem (1 sentence)', placeholder: 'What is broken?' },
+                      { label: 'The Idea (1 sentence)', placeholder: 'How are you fixing it?' },
+                      { label: 'Proof (1 sentence)', placeholder: 'Why does this work?' },
+                      { label: 'Team (1 sentence)', placeholder: 'Who is building this?' }
+                    ].map((field, i) => (
+                      <div key={i}>
+                        <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest ml-2 mb-2 block">{field.label}</label>
+                        <input type="text" placeholder={field.placeholder} className={`${THEME.neutral.card} w-full p-4 rounded-2xl border border-slate-800 text-white font-medium outline-none focus:border-indigo-500 text-sm`} />
+                      </div>
+                    ))}
+                </div>
+                <button onClick={() => { setActiveTab('discovery'); setStep('feed'); }} className="w-full bg-indigo-500 text-white py-5 rounded-2xl font-black text-lg mt-8 active:scale-95 transition-all">Submit Profile</button>
+            </div>
+          )}
+
+          {/* 0. INVESTOR ONBOARDING & VETTING */}
+          {step === 'investor-setup' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-8 pt-20 animate-in slide-in-from-right-10`}>
+                <h2 className="text-3xl font-black text-white italic tracking-tighter mb-2">Verification.</h2>
+                <p className="text-slate-500 text-sm mb-8">Keep it minimal. Credibility first.</p>
+                
+                <div className="space-y-5">
+                    {[
+                      { label: 'Firm / Affiliation', placeholder: 'e.g. Angel, Nexus Labs' },
+                      { label: 'Investing Stage', placeholder: 'e.g. Pre-seed / Seed' },
+                      { label: 'Ticket Size Range', placeholder: 'e.g. $250k - $500k' },
+                      { label: 'Sectors', placeholder: 'e.g. DevTools, Fintech' },
+                      { label: 'Geography', placeholder: 'e.g. Global, SF, London' }
+                    ].map((field, i) => (
+                      <div key={i}>
+                        <label className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest ml-2 mb-2 block">{field.label}</label>
+                        <input type="text" placeholder={field.placeholder} className={`${THEME.neutral.card} w-full p-4 rounded-2xl border border-slate-800 text-white font-medium outline-none focus:border-emerald-500 text-sm`} />
+                      </div>
+                    ))}
+                </div>
+                <button onClick={() => setStep('pending-verification')} className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black text-lg mt-8 active:scale-95 transition-all">Submit for Review</button>
+            </div>
+          )}
+
+          {step === 'pending-verification' && (
+            <div className={`min-h-full ${THEME.neutral.bg} flex flex-col items-center justify-center p-10 text-center animate-in zoom-in-95`}>
+               <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mb-8 border border-slate-800">
+                  <ShieldCheck size={40} className="text-slate-500" />
+               </div>
+               <h2 className="text-3xl font-black text-white italic tracking-tighter mb-4">Pending Verification.</h2>
+               <p className="text-slate-500 mb-12">We are reviewing your profile. To maintain high signal, discovery is blocked until approval.</p>
+               
+               {/* Hidden developer button for demo progression */}
+               <button onClick={() => { setActiveTab('discovery'); setStep('feed'); }} className="text-xs font-bold text-slate-700 underline underline-offset-4">Developer: Simulate Approval</button>
+            </div>
+          )}
+
+          {/* HOME DASHBOARD */}
+          {step === 'home' && (
+            <div className={`min-h-full ${THEME.neutral.bg} pt-24 px-8 flex flex-col animate-in fade-in`}>
+              <div className="flex justify-between items-center mb-10">
+                <div>
+                  <h2 className="text-4xl font-black text-white italic tracking-tighter">Overview.</h2>
+                  <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Welcome back</p>
+                </div>
+                <div className={`w-14 h-14 ${roleTheme.primary} rounded-2xl flex items-center justify-center text-white text-2xl font-black italic shadow-lg`}>
+                  {role === 'founder' ? 'F' : 'I'}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* AI-Curated Picks Section (10 in PDF) */}
+                <div className={`${THEME.neutral.card} p-8 rounded-[35px] border ${THEME.neutral.border} shadow-xl relative overflow-hidden`}>
+                   <div className={`absolute top-0 left-0 w-full h-1 ${roleTheme.primary}`} />
+                   <h3 className="text-white font-black text-2xl italic mb-3 flex items-center gap-2"><Zap size={24} className={roleTheme.text}/> Curated Queue</h3>
+                   <p className="text-slate-400 text-sm leading-relaxed mb-8">Top aligned {role === 'founder' ? 'investors' : 'founders'} this week based on sector and ticket fit.</p>
+                   <button onClick={() => { setActiveTab('discovery'); setStep('feed'); }} className={`w-full py-5 rounded-2xl ${roleTheme.primary} text-white font-black text-lg active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2`}>
+                     Enter Discovery <ArrowRight size={20} />
+                   </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <button onClick={() => { setActiveTab('calls'); setStep('calls'); }} className={`${THEME.neutral.card} p-6 rounded-[35px] border ${THEME.neutral.border} flex flex-col justify-between h-36 active:scale-95 transition-all text-left`}>
+                     <Activity size={24} className={hasMatches ? roleTheme.text : 'text-slate-500'} />
+                     <div>
+                       <p className="text-white font-black text-3xl">{hasMatches ? '1' : '0'}</p>
+                       <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest mt-1">Active Loops</p>
+                     </div>
+                   </button>
+                   <button onClick={() => { setActiveTab('profile'); setStep('profile'); }} className={`${THEME.neutral.card} p-6 rounded-[35px] border ${THEME.neutral.border} flex flex-col justify-between h-36 active:scale-95 transition-all text-left`}>
+                     <HistoryIcon size={24} className="text-slate-500" />
+                     <div>
+                       <p className="text-white font-black text-3xl">{callHistory.length}</p>
+                       <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest mt-1">Past Connections</p>
+                     </div>
+                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. DISCOVERY FEED */}
+          {step === 'feed' && (
+            <div className={`h-full ${THEME.neutral.bg} flex flex-col pt-16 animate-in fade-in`}>
+              <div className="px-8 mb-6 flex justify-between items-center">
+                <h2 className="text-3xl font-black text-white italic tracking-tighter">Discovery</h2>
+                <div className={`${roleTheme.light} border ${roleTheme.border} px-3 py-1.5 rounded-full`}>
+                    <span className={`text-[10px] font-black ${roleTheme.text}`}>ROLE: {role.toUpperCase()}</span>
+                </div>
+              </div>
+              
+              <div className="flex-1 px-5 pb-32 relative">
+                
+                {/* FOUNDER SWIPE LIMIT WARNING */}
+                {role === 'founder' && !swipeWarningShown && (
+                  <div className="absolute inset-x-5 top-1/4 z-[100] bg-indigo-600 rounded-[35px] p-8 text-center shadow-2xl animate-in zoom-in-95">
+                    <AlertCircle size={40} className="text-white mx-auto mb-4" />
+                    <h3 className="text-2xl font-black text-white italic mb-2">Intentionality check.</h3>
+                    <p className="text-indigo-100 mb-6 text-sm leading-relaxed">You only have <strong className="text-white font-black">5 right swipes a week</strong>. Review profiles carefully. Use them intentionally.</p>
+                    <button onClick={() => setSwipeWarningShown(true)} className="w-full bg-white text-indigo-900 py-4 rounded-2xl font-black text-lg">I understand</button>
+                  </div>
+                )}
+
+                <div className={`h-full relative transition-all duration-500 ease-out transform
+                    ${swipeDir === 'right' ? 'translate-x-[120%] rotate-12 opacity-0' : ''}
+                    ${swipeDir === 'left' ? '-translate-x-[120%] -rotate-12 opacity-0' : ''}`}
+                >
+                    {/* FEED CARD - STRICT TO DOCUMENT RULES */}
+                    <div className={`${THEME.neutral.card} h-[600px] rounded-[40px] border ${THEME.neutral.border} overflow-hidden flex flex-col shadow-2xl relative ${role === 'founder' && !swipeWarningShown ? 'blur-md opacity-50 pointer-events-none' : ''}`}>
+                        
+                        <div className="p-8 flex-1 overflow-y-auto no-scrollbar">
+                            {role === 'founder' ? (
+                                // INVESTOR CARD (seen by Founder)
+                                <>
+                                  <h3 className="text-3xl font-black text-white mb-2 italic">
+                                      {MOCK_DATA.investors[swipedCount]?.name}
+                                  </h3>
+                                  <p className="text-slate-400 font-bold mb-8">{MOCK_DATA.investors[swipedCount]?.firm}</p>
+                                  
+                                  <div className="space-y-6">
+                                    <div>
+                                      <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest mb-1">Ticket Size</p>
+                                      <p className="text-white font-medium">{MOCK_DATA.investors[swipedCount]?.ticketSize}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest mb-1">Focus Areas</p>
+                                      <p className="text-white font-medium">{MOCK_DATA.investors[swipedCount]?.focusAreas}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest mb-1">Geography</p>
+                                      <p className="text-white font-medium">{MOCK_DATA.investors[swipedCount]?.geography}</p>
+                                    </div>
+                                    <div className="p-4 bg-slate-900/50 rounded-2xl border border-slate-800">
+                                      <p className="text-white text-sm leading-relaxed italic opacity-80">
+                                          "{MOCK_DATA.investors[swipedCount]?.style}"
+                                      </p>
+                                    </div>
+                                  </div>
+                                </>
+                            ) : (
+                                // FOUNDER CARD (seen by Investor)
+                                <>
+                                  <h3 className="text-3xl font-black text-white mb-2 italic">
+                                      {MOCK_DATA.founders[swipedCount]?.company}
+                                  </h3>
+                                  <p className="text-slate-400 font-bold mb-8">{MOCK_DATA.founders[swipedCount]?.sector}</p>
+                                  
+                                  <div className="space-y-6">
+                                    <div>
+                                      <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Problem</p>
+                                      <p className="text-white font-medium text-sm leading-relaxed">{MOCK_DATA.founders[swipedCount]?.problem}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Their Idea</p>
+                                      <p className="text-white font-medium text-sm leading-relaxed">{MOCK_DATA.founders[swipedCount]?.idea}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Proof</p>
+                                      <p className="text-white font-medium text-sm leading-relaxed">{MOCK_DATA.founders[swipedCount]?.proof}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Team</p>
+                                      <p className="text-white font-medium text-sm leading-relaxed">{MOCK_DATA.founders[swipedCount]?.team}</p>
+                                    </div>
+                                  </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* SWIPE ACTIONS */}
+                        <div className="p-6 bg-slate-900/30 border-t border-slate-800 flex gap-4 backdrop-blur-md absolute bottom-0 w-full">
+                            <button onClick={() => handleSwipe('left')} className="w-20 h-20 rounded-3xl bg-slate-800 flex items-center justify-center text-slate-500 active:scale-90 transition-all border border-slate-700"><X size={32} /></button>
+                            <button onClick={() => handleSwipe('right')} className={`flex-1 h-20 rounded-3xl ${roleTheme.primary} flex items-center justify-center text-white gap-3 active:scale-[0.98] transition-all`}>
+                                <Check size={32} strokeWidth={3} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. MATCH NOTIFICATION */}
+          {step === 'match' && (
+            <div className={`min-h-full bg-slate-900 flex flex-col items-center justify-center p-10 text-center text-white animate-in slide-in-from-bottom-full duration-500`}>
+              <div className="w-24 h-24 bg-white/10 rounded-[40px] flex items-center justify-center mb-8 border border-white/20"><ShieldCheck size={48} /></div>
+              <h2 className="text-5xl font-black italic tracking-tighter leading-tight mb-4">Mutual Curiosity.</h2>
+              <p className="text-slate-400 text-base leading-relaxed mb-12">The signal is mutual. Permission acknowledged.</p>
+              
+              {role === 'founder' ? (
+                <button onClick={() => setStep('intent-form')} className="w-full bg-white text-black py-6 rounded-3xl font-black text-xl active:scale-95 transition-all">Answer Questions</button>
+              ) : (
+                <button onClick={() => setStep('intent-review')} className="w-full bg-white text-black py-6 rounded-3xl font-black text-xl active:scale-95 transition-all">Review Request</button>
+              )}
+            </div>
+          )}
+
+          {/* 5. INTENT REQUEST (FOUNDER ONLY) */}
+          {step === 'intent-form' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-8 pt-20 animate-in slide-in-from-right-10`}>
+                <h2 className="text-3xl font-black text-white italic tracking-tighter mb-2">Intent Request.</h2>
+                <p className="text-slate-500 text-sm mb-8">Answer clearly. Ask cleanly. No attachments.</p>
+                
+                <div className="space-y-6">
+                    {[
+                      { label: 'Why now?', ph: 'Why is this the exact right time?' },
+                      { label: 'Why this investor?', ph: 'Specific alignment?' },
+                      { label: 'What is the ask?', ph: 'Funding, advice, or feedback?' }
+                    ].map((q, i) => (
+                      <div key={i}>
+                        <label className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3 block">{q.label}</label>
+                        <textarea rows="3" placeholder={q.ph} className={`${THEME.neutral.card} w-full p-4 rounded-2xl border border-slate-800 text-white font-medium outline-none focus:border-indigo-500 text-sm resize-none`} />
+                      </div>
+                    ))}
+                </div>
+                <button onClick={() => setStep('pending-intent')} className="w-full bg-indigo-500 text-white py-5 rounded-2xl font-black text-lg mt-8 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all flex justify-center items-center gap-2">
+                  <Send size={20} /> Submit Request
+                </button>
+            </div>
+          )}
+
+          {/* 6. DECISION WAITING STATE (FOUNDER) */}
+          {step === 'pending-intent' && (
+             <div className={`min-h-full ${THEME.neutral.bg} flex flex-col items-center justify-center p-10 text-center animate-in zoom-in-95`}>
+               <div className="w-24 h-24 bg-slate-900 rounded-[35px] flex items-center justify-center mb-8 border border-slate-800">
+                  <Clock size={40} className="text-slate-500" />
+               </div>
+               <h2 className="text-4xl font-black text-white italic tracking-tighter mb-4">Pending.</h2>
+               <p className="text-slate-500 mb-12 font-medium">Request sent. No response or follow-up is required from you.</p>
+               
+               <button onClick={() => setStep('scheduling')} className="text-xs font-bold text-indigo-500 underline underline-offset-4 mt-10">Developer: Simulate Investor Approval</button>
+             </div>
+          )}
+
+          {/* 5. INTENT REVIEW (INVESTOR ONLY) */}
+          {step === 'intent-review' && (
+            <div className={`min-h-full ${THEME.neutral.bg} p-8 pt-20 animate-in slide-in-from-right-10`}>
+                <h2 className="text-3xl font-black text-white italic tracking-tighter mb-2">Evaluate Intent.</h2>
+                <p className="text-slate-500 text-sm mb-8">Review the ask. Control your time.</p>
+                
+                <div className={`${THEME.neutral.card} border border-slate-800 rounded-[30px] p-6 mb-8`}>
+                   <h3 className="text-xl font-black text-white mb-6">Vector Health</h3>
+                   <div className="space-y-6">
+                      <div>
+                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-2">Why now?</p>
+                        <p className="text-slate-300 text-sm italic">"We just secured 3 pilot clinics and need capital to scale our backend infrastructure before Q3."</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-2">Why you?</p>
+                        <p className="text-slate-300 text-sm italic">"Your thesis on decentralizing diagnostics matches our roadmap exactly."</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-2">What is the ask?</p>
+                        <p className="text-slate-300 text-sm italic">"Looking to close a $500k pre-seed round. We'd love 15 mins to discuss fit."</p>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <button onClick={() => completeJourney('no')} className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black border border-slate-800 active:scale-95 transition-all">Decline</button>
+                  <button onClick={() => setStep('scheduling')} className="flex-1 bg-emerald-500 text-white py-5 rounded-2xl font-black shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">Approve</button>
+                </div>
+            </div>
+          )}
+
+          {/* 7. SCHEDULING (IF APPROVED) */}
+          {step === 'scheduling' && (
+             <div className={`min-h-full ${THEME.neutral.bg} p-8 pt-24 animate-in slide-in-from-bottom-10`}>
+               <div className={`w-16 h-16 ${roleTheme.light} rounded-2xl flex items-center justify-center mb-6 text-white`}><CalendarDays size={28} /></div>
+               <h2 className="text-4xl font-black text-white italic tracking-tighter mb-2">Lock In.</h2>
+               <p className="text-slate-400 text-sm font-medium mb-10">Select a time for your bounded 15-minute Loop.</p>
+
+               <div className="space-y-3 mb-12">
+                 {['Today, 2:00 PM', 'Tomorrow, 10:30 AM', 'Thursday, 4:00 PM'].map((time, i) => (
+                    <button key={i} onClick={() => { setActiveTab('calls'); setStep('calls'); }} className={`${THEME.neutral.card} w-full p-6 rounded-2xl border border-slate-800 text-left hover:border-white transition-all active:scale-95 flex justify-between items-center group`}>
+                      <span className="text-white font-bold">{time}</span>
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-white" />
+                    </button>
+                 ))}
+               </div>
+             </div>
+          )}
+
+          {/* LOOPS DIRECTORY */}
+          {step === 'calls' && (
+            <div className={`min-h-full ${THEME.neutral.bg} pt-24 px-8 flex flex-col animate-in fade-in`}>
+              <h2 className="text-4xl font-black text-white italic tracking-tighter mb-8">Loops.</h2>
+              
+              <div className="flex-1 space-y-8 pb-32">
+                {hasMatches && activeCallPartner && (
+                    <div className={`${THEME.neutral.card} border ${roleTheme.border} p-8 rounded-[40px] shadow-2xl animate-in slide-in-from-bottom-4 relative overflow-hidden`}>
+                        <div className={`absolute top-0 left-0 w-full h-1 ${roleTheme.primary}`} />
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className={`w-14 h-14 ${roleTheme.light} rounded-2xl flex items-center justify-center ${roleTheme.text}`}><Phone size={24} /></div>
+                            <div>
+                                <p className="font-black text-xl text-white tracking-tight">{activeCallPartner.name || activeCallPartner.company}</p>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Confirmed: 15m Loop</p>
+                            </div>
+                        </div>
+                        <button onClick={() => { setTimeLeft(900); setStep('active-call'); }} className="w-full py-5 bg-white text-black rounded-2xl font-black text-lg active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3">
+                            <Video size={20} /> Join Call
+                        </button>
+                    </div>
+                )}
+
+                <div className="pt-4 border-t border-slate-900">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+                        <HistoryIcon size={12} /> Closed Matches History
+                    </p>
+                    {callHistory.length > 0 ? (
+                        <div className="space-y-3">
+                            {callHistory.map(entry => (
+                                <div key={entry.id} className={`${THEME.neutral.card} border border-slate-900 p-5 rounded-3xl flex justify-between items-center group`}>
+                                    <div>
+                                        <p className="font-bold text-white tracking-tight italic">{entry.partner}</p>
+                                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{entry.date}</p>
+                                    </div>
+                                    <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${entry.outcome.includes('Off-Platform') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                                        {entry.outcome}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="h-32 flex items-center justify-center border-2 border-dashed border-slate-900 rounded-[30px] opacity-20">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">No previous Loops</span>
+                        </div>
+                    )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 8. THE CALL */}
+          {step === 'active-call' && (
+            <div className="absolute inset-0 bg-[#0A0C10] z-[200] flex flex-col animate-in zoom-in-95">
+                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                    <div className="relative mb-12">
+                        <div className="w-40 h-40 bg-slate-900 rounded-[60px] flex items-center justify-center overflow-hidden border border-slate-800">
+                             <User size={80} className="text-slate-800" />
+                        </div>
+                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-red-500 px-4 py-1.5 rounded-full text-white text-[10px] font-black uppercase tracking-widest animate-pulse shadow-lg shadow-red-500/50 border-[4px] border-[#0A0C10]">
+                            Live
+                        </div>
+                    </div>
+                    
+                    <h3 className="text-4xl font-black text-white italic tracking-tighter mb-2">{activeCallPartner?.name || activeCallPartner?.company}</h3>
+                    <p className="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px] mb-8">FOUND LOOP • 15 MIN BOUNDED</p>
+                    
+                    <div className="text-7xl font-black text-white font-mono tracking-tighter drop-shadow-2xl">
+                        {formatTime(timeLeft)}
+                    </div>
+                    <p className="text-slate-600 font-bold uppercase tracking-widest text-[9px] mt-3">Remaining in Loop</p>
+                </div>
+
+                <div className="p-12 pb-20 flex justify-center gap-6">
+                    <button className="w-20 h-20 rounded-full bg-slate-900 text-white flex items-center justify-center border border-slate-800 active:scale-90 transition-all"><Mic size={24} /></button>
+                    <button onClick={() => setStep('post-call-survey')} className="w-24 h-24 rounded-[35px] bg-red-600 text-white flex items-center justify-center shadow-2xl shadow-red-500/20 active:scale-90 transition-all"><PhoneOff size={32} /></button>
+                    <button className="w-20 h-20 rounded-full bg-slate-900 text-white flex items-center justify-center border border-slate-800 active:scale-90 transition-all"><Video size={24} /></button>
+                </div>
+            </div>
+          )}
+
+          {/* 9. OUTCOME */}
+          {step === 'post-call-survey' && (
+            <div className={`absolute inset-0 ${THEME.neutral.bg} z-[210] p-10 flex flex-col justify-center text-center animate-in slide-in-from-bottom-full duration-500`}>
+                <div className="w-24 h-24 bg-slate-900 rounded-[40px] flex items-center justify-center mx-auto mb-8 border border-slate-800"><CheckCircle2 size={40} className="text-white" /></div>
+                <h2 className="text-5xl font-black text-white italic tracking-tighter mb-4">Loop Complete.</h2>
+                <p className="text-slate-400 font-medium mb-16 text-lg">Continue off-platform?</p>
+                
+                <div className="space-y-4">
+                    <button onClick={() => completeJourney('yes')} className={`w-full p-6 ${roleTheme.primary} rounded-3xl text-white font-black text-xl active:scale-95 transition-all shadow-xl`}>
+                        Yes
+                    </button>
+                    <button onClick={() => completeJourney('no')} className="w-full p-6 bg-slate-900 border border-slate-800 rounded-3xl text-white font-black text-xl active:scale-95 transition-all">
+                        No
+                    </button>
+                </div>
+            </div>
+          )}
+
+          {/* PROFILE */}
+          {step === 'profile' && (
+             <div className={`min-h-full ${THEME.neutral.bg} pt-24 px-8 animate-in fade-in`}>
+                <div className="flex flex-col items-center mb-12">
+                  <div className={`w-24 h-24 ${roleTheme.primary} rounded-[35px] flex items-center justify-center text-white text-4xl font-black italic shadow-2xl mb-6`}>
+                    {role === 'founder' ? 'J' : 'A'}
+                  </div>
+                  <h3 className="text-2xl font-black text-white italic tracking-tighter">
+                    {role === 'founder' ? 'James Kim' : 'Alex Rivers'}
+                  </h3>
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-1">
+                    {role === 'founder' ? 'Founder @ Vector Health' : 'Investor @ Blue Chip'}
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <button onClick={() => { setActiveTab('calls'); setStep('calls'); }} className={`${THEME.neutral.card} w-full flex items-center justify-between p-6 rounded-2xl border border-slate-800`}>
+                    <span className="font-bold text-white">View Loop History</span>
+                    <HistoryIcon size={18} className="text-slate-500" />
+                  </button>
+                  <button onClick={() => { setStep('landing'); setRole(null); }} className="w-full p-6 bg-slate-900 border border-slate-800 rounded-2xl text-red-500 font-bold text-left mt-4">Sign Out</button>
+                </div>
+             </div>
+          )}
+
+        </main>
+
+        {/* BOTTOM NAVIGATION */}
+        {['home', 'feed', 'calls', 'profile'].includes(step) && <Navbar />}
+      </div>
+    </div>
+  );
+}
